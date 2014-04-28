@@ -1,0 +1,138 @@
+#-sbcl
+(eval-when (:compile-toplevel :load-toplevel)
+  (error "Only SBCL is supported"))
+
+(defpackage serial
+  (:use #:cl #:trivial-gray-streams #:serial-lowlevel)
+  (:export #:serial-device-input
+           #:serial-device-output
+           #:serial-device-io
+           #:serial-device-baudrate
+           #:serial-device-framesize
+           #:serial-device-stopbits
+           #:serial-device-parity))
+(in-package :serial)
+
+;; FIXME: Do not forget error handling
+(defclass serial-device (fundamental-binary-stream
+                         fundamental-character-stream)
+  ((name         :reader serial-device-name
+                 :initarg :name
+                 :initform (error "Specify the name of a device"))
+   (stream       :accessor serial-device-stream
+                 :documentation "Stream associated with device")
+   (fd           :accessor serial-device-fd
+                 :documentation "File descriptor associated with device")
+   (baudrate     :accessor serial-device-baudrate
+                 :initarg :baudrate
+                 :initform 9600
+                 :documentation "Baudrate"
+                 :type (integer 0))
+   (framesize    :accessor serial-device-framesize
+                 :initarg :framesize
+                 :initform 8
+                 :documentation "Data bits in frame"
+                 :type (integer 5 8))
+   (stopbits     :accessor serial-device-stopbits
+                 :initarg :stopbits
+                 :initform 1
+                 :documentation "Number of stop bits. May be 1 or 2"
+                 :type (integer 1 2))
+   (parity       :accessor serial-device-parity
+                 :initarg :parity
+                 :initform #\N
+                 :documentation "Parity check. May be #\N, #\O or #\E"
+                 :type character)
+   (element-type :reader serial-device-element-type
+                 :initarg :element-type
+                 :initform 'character
+                 :documentation "Element type of the associated stream"))
+  (:documentation "Serial device. Not to be instaniated"))
+
+(defun configure-serial-device (device)
+  (declare (type serial-device device))
+  (configure-serial (serial-device-fd device)
+                    (serial-device-baudrate device)
+                    :binary (not (eql 'character (serial-device-element-type device)))
+                    :framesize (serial-device-framesize device)
+                    :stopbits (serial-device-stopbits device)
+                    :parity (serial-device-parity device)))
+
+(defmethod initialize-instance :after ((device serial-device) &rest initargs)
+  (declare (ignore initargs))
+  (multiple-value-bind (stream fd)
+      (open-serial (serial-device-name device)
+                   :input (input-stream-p device)
+                   :output (output-stream-p device)
+                   :element-type (serial-device-element-type device))
+    (setf (serial-device-stream device) stream
+          (serial-device-fd device) fd))
+  (configure-serial-device device))
+
+(defmethod close ((device serial-device) &rest args)
+  (declare (ignore args))
+  (close (serial-device-stream device))
+  (call-next-method))
+
+(macrolet ((def-accessors-with-update (names)
+             `(progn
+                ,@(loop for name in names collect
+                       `(defmethod (setf ,name) :after (val (device serial-device))
+                          (declare (ignore val))
+                          (configure-serial-device device))))))
+  (def-accessors-with-update (serial-device-baudrate
+                              serial-device-framesize
+                              serial-device-stopbits
+                              serial-device-parity)))
+
+(defmethod print-object ((device serial-device) stream)
+  (print-unreadable-object (device stream :type t :identity t)
+    (format stream "~d ~d~c~d"
+            (serial-device-baudrate device)
+            (serial-device-framesize device)
+            (serial-device-parity device)
+            (serial-device-stopbits device))))
+
+(defclass serial-device-input (serial-device
+                               fundamental-character-input-stream
+                               fundamental-binary-input-stream)
+  ()
+  (:documentation "Serial device open for input"))
+
+(defclass serial-device-output (serial-device
+                               fundamental-character-output-stream
+                               fundamental-binary-output-stream)
+  ()
+  (:documentation "Serial device open for output"))
+
+(defclass serial-device-io (serial-device-output serial-device-input)
+  ()
+  (:documentation "Bidirectional serial device"))
+
+(macrolet ((def-atomic-input-methods (specs)
+             `(progn
+                ,@(loop for spec in specs collect
+                       (destructuring-bind (name class func) spec
+                         `(defmethod ,name ((stream ,class))
+                            (,func (serial-device-stream stream)))))))
+           (def-atomic-output-methods (specs)
+             `(progn
+                ,@(loop for spec in specs collect
+                       (destructuring-bind (name class func) spec
+                         `(defmethod ,name ((stream ,class) val)
+                            (,func val (serial-device-stream stream))))))))
+           
+  (def-atomic-input-methods ((stream-read-char serial-device-input read-char)
+                             (stream-read-byte serial-device-input read-byte)
+                             (stream-read-line serial-device-input read-line)))
+  
+  (def-atomic-output-methods ((stream-write-char serial-device-output write-char)
+                              (stream-write-byte serial-device-output write-byte))))
+
+(defmethod stream-write-string ((stream serial-device-output) string &optional start end)
+  (write-string string (serial-device-stream stream) :start start :end end))
+
+(defmethod stream-read-sequence ((stream serial-device-input) sequence start end &key)
+  (read-sequence sequence stream :start start :end end))
+(defmethod stream-write-sequence ((stream serial-device-output) sequence start end &key)
+  (write-sequence sequence stream :start start :end end))
