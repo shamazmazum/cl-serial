@@ -11,8 +11,7 @@
   (sb-posix:open devname
                  (logior flags sb-posix:o-ndelay sb-posix:o-noctty)))
 
-(defun open-serial (devname &key input output element-type)
-  (declare (type (member character unsigned-byte) element-type))
+(defun open-serial (devname &key input output)
   (let ((fd (open-serial% devname
                           (cond
                             ((and input output) sb-posix:o-rdwr)
@@ -23,16 +22,17 @@
      (sb-sys:make-fd-stream fd
                             :input  input
                             :output output
-                            :element-type element-type)
+                            :element-type '(unsigned-byte 8))
      fd)))
 
 (defun close-serial (stream)
   (close stream)) ; Just an alias
 
-(defun configure-serial (fd baudrate &key binary (framesize 8) (stopbits 1) (parity #\N))
+(defun configure-serial (fd baudrate &key (canon t) (framesize 8) (stopbits 1) (parity #\N))
   (declare (type (member 5 6 7 8) framesize)
            (type (member 1 2) stopbits)
-           (type (member #\N #\O #\E) parity))
+           (type (member #\N #\O #\E) parity)
+           (type boolean canon))
   (let ((attr (sb-posix:tcgetattr fd)))
     ;; Set new baudrate
     (let ((baudrate-bits
@@ -79,7 +79,7 @@
       (let ((canon-bits (logior sb-posix:icanon
                                 sb-posix:echo
                                 sb-posix:echoe)))
-        (if binary
+        (if canon
             (setf lflag (logand lflag
                                 (lognot
                                  (logior canon-bits sb-posix:isig)))

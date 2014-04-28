@@ -10,12 +10,12 @@
            #:serial-device-baudrate
            #:serial-device-framesize
            #:serial-device-stopbits
-           #:serial-device-parity))
+           #:serial-device-parity
+           #:serial-device-canonp))
 (in-package :serial)
 
 ;; FIXME: Do not forget error handling
-(defclass serial-device (fundamental-binary-stream
-                         fundamental-character-stream)
+(defclass serial-device (fundamental-binary-stream)
   ((name         :reader serial-device-name
                  :initarg :name
                  :initform (error "Specify the name of a device"))
@@ -42,18 +42,19 @@
                  :initarg :parity
                  :initform #\N
                  :documentation "Parity check. May be #\N, #\O or #\E"
-                 :type character)
-   (element-type :reader serial-device-element-type
-                 :initarg :element-type
-                 :initform 'character
-                 :documentation "Element type of the associated stream"))
+                 :type (member #\N #\O #\E))
+   (canonp       :accessor serial-device-canon-p
+                 :initarg :canonp
+                 :initform t
+                 :type boolean
+                 :documentation "Canonical or raw io"))
   (:documentation "Serial device. Not to be instaniated"))
 
 (defun configure-serial-device (device)
   (declare (type serial-device device))
   (configure-serial (serial-device-fd device)
                     (serial-device-baudrate device)
-                    :binary (not (eql 'character (serial-device-element-type device)))
+                    :canon (serial-device-canon-p device)
                     :framesize (serial-device-framesize device)
                     :stopbits (serial-device-stopbits device)
                     :parity (serial-device-parity device)))
@@ -63,8 +64,7 @@
   (multiple-value-bind (stream fd)
       (open-serial (serial-device-name device)
                    :input (input-stream-p device)
-                   :output (output-stream-p device)
-                   :element-type (serial-device-element-type device))
+                   :output (output-stream-p device))
     (setf (serial-device-stream device) stream
           (serial-device-fd device) fd))
   (configure-serial-device device))
@@ -83,7 +83,8 @@
   (def-accessors-with-update (serial-device-baudrate
                               serial-device-framesize
                               serial-device-stopbits
-                              serial-device-parity)))
+                              serial-device-parity
+                              serial-device-canon-p)))
 
 (defmethod print-object ((device serial-device) stream)
   (print-unreadable-object (device stream :type t :identity t)
@@ -93,15 +94,11 @@
             (serial-device-parity device)
             (serial-device-stopbits device))))
 
-(defclass serial-device-input (serial-device
-                               fundamental-character-input-stream
-                               fundamental-binary-input-stream)
+(defclass serial-device-input (serial-device fundamental-binary-input-stream)
   ()
   (:documentation "Serial device open for input"))
 
-(defclass serial-device-output (serial-device
-                               fundamental-character-output-stream
-                               fundamental-binary-output-stream)
+(defclass serial-device-output (serial-device fundamental-binary-output-stream)
   ()
   (:documentation "Serial device open for output"))
 
@@ -109,28 +106,10 @@
   ()
   (:documentation "Bidirectional serial device"))
 
-(macrolet ((def-atomic-input-methods (specs)
-             `(progn
-                ,@(loop for spec in specs collect
-                       (destructuring-bind (name class func) spec
-                         `(defmethod ,name ((stream ,class))
-                            (,func (serial-device-stream stream)))))))
-           (def-atomic-output-methods (specs)
-             `(progn
-                ,@(loop for spec in specs collect
-                       (destructuring-bind (name class func) spec
-                         `(defmethod ,name ((stream ,class) val)
-                            (,func val (serial-device-stream stream))))))))
-           
-  (def-atomic-input-methods ((stream-read-char serial-device-input read-char)
-                             (stream-read-byte serial-device-input read-byte)
-                             (stream-read-line serial-device-input read-line)))
-  
-  (def-atomic-output-methods ((stream-write-char serial-device-output write-char)
-                              (stream-write-byte serial-device-output write-byte))))
-
-(defmethod stream-write-string ((stream serial-device-output) string &optional start end)
-  (write-string string (serial-device-stream stream) :start start :end end))
+(defmethod stream-read-byte ((stream serial-device-input))
+  (read-byte (serial-device-stream stream)))
+(defmethod stream-write-byte ((stream serial-device-output) byte)
+  (write-byte byte (serial-device-stream stream)))
 
 (defmethod stream-read-sequence ((stream serial-device-input) sequence start end &key)
   (read-sequence sequence stream :start start :end end))
