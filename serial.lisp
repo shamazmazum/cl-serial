@@ -8,7 +8,7 @@
            #:serial-device-stopbits
            #:serial-device-parity
            #:serial-device-canon-p
-
+           #:with-serial-device
            #:reset-old-value))
 (in-package :serial)
 
@@ -122,3 +122,9 @@
   (read-sequence sequence stream :start start :end end))
 (defmethod stream-write-sequence ((stream serial-device-output) sequence start end &key)
   (write-sequence sequence stream :start start :end end))
+
+(defmacro with-serial-device ((var type &rest args) &body body)
+  `(let ((,var (make-instance ',type ,@args)))
+     (unwind-protect
+          (progn ,@body)
+       (close ,var))))
