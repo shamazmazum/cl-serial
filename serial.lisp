@@ -1,7 +1,3 @@
-#-sbcl
-(eval-when (:compile-toplevel :load-toplevel)
-  (error "Only SBCL is supported"))
-
 (defpackage serial
   (:use #:cl #:trivial-gray-streams #:serial-lowlevel)
   (:export #:serial-device-input

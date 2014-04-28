@@ -1,7 +1,3 @@
-(defpackage serial-lowlevel
-  (:use #:cl)
-  (:export #:open-serial
-           #:configure-serial))
 (in-package :serial-lowlevel)
 
 (eval-when (:compile-toplevel :load-toplevel)
@@ -9,7 +5,8 @@
 
 (defun open-serial% (devname flags)
   (sb-posix:open devname
-                 (logior flags sb-posix:o-ndelay sb-posix:o-noctty)))
+                 (modify-bitfield flags
+                                  :enable (sb-posix:o-ndelay sb-posix:o-noctty))))
 
 (defun open-serial (devname &key input output)
   (let ((fd (open-serial% devname
@@ -54,37 +51,37 @@
               (intern
                (format nil "CS~D" framesize)
                (find-package :sb-posix)))))
-      (setf cflag (logand (lognot sb-posix:csize) cflag)) ; Reset the old value
-      (setf cflag (logior size-bits cflag)))
+      (modify-bitfield cflag
+                       :disable (sb-posix:csize)
+                       :enable  (size-bits)))
       
       ;; Set parity...
-      (setf cflag (logand (lognot sb-posix:parenb) cflag))
-      (setf cflag (logand (lognot sb-posix:parodd) cflag)) ; ... first reseting the old value
-      (setf cflag (logior cflag
-                          (if (char/= #\N parity) sb-posix:parenb 0)
-                          (if (char=  #\O parity) sb-posix:parodd 0))
-            iflag (if (char/= #\N parity)
-                      (logior iflag sb-posix:inpck sb-posix:istrip)
-                      iflag))
-                          
+      (modify-bitfield cflag :disable (sb-posix:parenb sb-posix:parodd))
+      (when (char/= #\N parity)
+        (modify-bitfield cflag :enable (sb-posix:parenb))
+        (modify-bitfield iflag :enable (sb-posix:inpck sb-posix:istrip)))
+      (when (char= #\O parity)
+        (modify-bitfield cflag :enable (sb-posix:parodd 0)))
 
       ;; Set additional stop bit if needed
-      (setf cflag (logand (lognot sb-posix:cstopb) cflag))
-      (if (= stopbits 2) (setf cflag (logior sb-posix:cstopb cflag)))
+      (modify-bitfield cflag :disable (sb-posix:cstopb))
+      (if (= stopbits 2) (modify-bitfield cflag :enable (sb-posix:cstopb)))
 
       ;; Enable normal operation
-      (setf cflag (logior cflag sb-posix:clocal sb-posix:cread))
+      (modify-bitfield cflag
+                       :enable (sb-posix:clocal sb-posix:cread))
 
       ;; Set raw or canonical input and output
       (let ((canon-bits (logior sb-posix:icanon
                                 sb-posix:echo
                                 sb-posix:echoe)))
-        (if canon
-            (setf lflag (logand lflag
-                                (lognot
-                                 (logior canon-bits sb-posix:isig)))
-                  oflag (logand (lognot sb-posix:opost) oflag))
-            (setf lflag (logior lflag canon-bits)))))
+        (modify-bitfield lflag :disable (canon-bits))
+        (cond
+          (canon
+           (modify-bitfield lflag :disable (sb-posix:isig))
+           (modify-bitfield oflag :disable (sb-posix:opost)))
+          (t
+           (modify-bitfield lflag :enable (canon-bits))))))
 
     ;; Set new attributes
     (sb-posix:tcsetattr fd sb-posix:tcsanow attr))
