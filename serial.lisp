@@ -7,7 +7,9 @@
            #:serial-device-framesize
            #:serial-device-stopbits
            #:serial-device-parity
-           #:serial-device-canonp))
+           #:serial-device-canon-p
+
+           #:reset-old-value))
 (in-package :serial)
 
 ;; FIXME: Do not forget error handling
@@ -70,12 +72,21 @@
   (close (serial-device-stream device))
   (call-next-method))
 
-(macrolet ((def-accessors-with-update (names)
-             `(progn
-                ,@(loop for name in names collect
-                       `(defmethod (setf ,name) :after (val (device serial-device))
-                          (declare (ignore val))
-                          (configure-serial-device device))))))
+(macrolet
+    ((def-accessors-with-update (names)
+       `(progn
+          ,@(loop for name in names collect
+                 `(defmethod (setf ,name) :around (val (device serial-device))
+                             (declare (ignore val))
+                             (let ((oldval (,name device)))
+                               (restart-case
+                                   (progn
+                                     (call-next-method)
+                                     (configure-serial-device device))
+                                 (reset-old-value ()
+                                   :report "Fall back to the old value"
+                                   (setf (,name device) oldval)))))))))
+  
   (def-accessors-with-update (serial-device-baudrate
                               serial-device-framesize
                               serial-device-stopbits
