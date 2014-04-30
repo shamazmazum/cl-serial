@@ -1,15 +1,3 @@
-(defpackage serial
-  (:use #:cl #:trivial-gray-streams #:serial-lowlevel)
-  (:export #:serial-device-input
-           #:serial-device-output
-           #:serial-device-io
-           #:serial-device-baudrate
-           #:serial-device-framesize
-           #:serial-device-stopbits
-           #:serial-device-parity
-           #:serial-device-canon-p
-           #:with-serial-device
-           #:reset-old-value))
 (in-package :serial)
 
 ;; FIXME: Do not forget error handling
@@ -115,6 +103,7 @@
   ()
   (:documentation "Serial device open for output"))
 
+#-clisp
 (defclass serial-device-io (serial-device-output serial-device-input)
   ()
   (:documentation "Bidirectional serial device"))

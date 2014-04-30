@@ -1,98 +1,83 @@
 (in-package :serial-lowlevel)
-
 (eval-when (:compile-toplevel :load-toplevel)
   (require 'sb-posix))
 
-#|(define-condition serial-error (type-error
-                                sb-posix:syscall-error)
-  ())|#
-
-(defun open-serial% (devname flags)
+(defun open-serial% (devname input output)
   (sb-posix:open devname
-                 (modify-bitfield flags
-                                  :enable (sb-posix:o-ndelay sb-posix:o-noctty))))
+                 (logior sb-posix:o-ndelay
+                         sb-posix:o-noctty
+                         (cond
+                           ((and input output) sb-posix:o-rdwr)
+                           (output             sb-posix:o-wronly)
+                           (input              sb-posix:o-rdonly)
+                           (t 0)))))
 
-(defun open-serial (devname &key input output)
-  (let ((fd (open-serial% devname
-                          (cond
-                            ((and input output) sb-posix:o-rdwr)
-                             (output            sb-posix:o-wronly)
-                             (input             sb-posix:o-rdonly)))))
+(defun make-stream-from-fd (fd input output)
+  (sb-sys:make-fd-stream fd
+                         :input input
+                         :output output
+                         :element-type '(unsigned-byte 8)))
 
-    (values
-     (sb-sys:make-fd-stream fd
-                            :input  input
-                            :output output
-                            :element-type '(unsigned-byte 8))
-     fd)))
+(defun tcgetattr (fd)
+  (sb-posix:tcgetattr fd))
+(defun tcsetattr (fd attr)
+  (sb-posix:tcsetattr fd sb-posix:tcsanow attr))
+(defun cfsetispeed (speed attr)
+  (sb-posix:cfsetispeed speed attr))
+(defun cfsetospeed (speed attr)
+  (sb-posix:cfsetospeed speed attr))
+(defun termios-cflag (attr)
+  (sb-posix:termios-cflag attr))
+(defun termios-lflag (attr)
+  (sb-posix:termios-lflag attr))
+(defun termios-iflag (attr)
+  (sb-posix:termios-iflag attr))
+(defun termios-oflag (attr)
+  (sb-posix:termios-oflag attr))
+(defun (setf termios-cflag) (flag attr)
+  (setf (sb-posix:termios-cflag attr) flag))
+(defun (setf termios-lflag) (flag attr)
+  (setf (sb-posix:termios-lflag attr) flag))
+(defun (setf termios-iflag) (flag attr)
+  (setf (sb-posix:termios-iflag attr) flag))
+(defun (setf termios-oflag) (flag attr)
+  (setf (sb-posix:termios-oflag attr) flag))
 
-(defun close-serial (stream)
-  (close stream)) ; Just an alias
+(defparameter *baudrates*
+  `((50     . ,sb-posix:B50)
+    (75     . ,sb-posix:B75)
+    (110    . ,sb-posix:B110)
+    (200    . ,sb-posix:B200)
+    (300    . ,sb-posix:B300)
+    (600    . ,sb-posix:B600)
+    (1200   . ,sb-posix:B1200)
+    (1800   . ,sb-posix:B1800)
+    (2400   . ,sb-posix:B2400)
+    (4800   . ,sb-posix:B4800)
+    (9600   . ,sb-posix:B9600)
+    (19200  . ,sb-posix:B19200)
+    (38400  . ,sb-posix:B38400)
+    (57600  . ,sb-posix:B57600)
+    (115200 . ,sb-posix:B115200)
+    (230400 . ,sb-posix:B230400)))
 
-(defun configure-serial (fd baudrate &key (canon t) (framesize 8) (stopbits 1) (parity #\N))
-  (declare (type (integer 5 8) framesize)
-           (type (integer 1 2) stopbits)
-           (type (member #\N #\O #\E) parity)
-           (type (member 50 75 110 134
-                         150 200 300 600
-                         1200 1800 2400 4800
-                         9600 19200 38400
-                         57600 115200 230400)
-                 baudrate)
-           (type boolean canon))
-  (let ((attr (sb-posix:tcgetattr fd)))
-    ;; Set new baudrate
-    (let ((baudrate-bits
-           ;; Try this dirty hack
-           (eval
-            (intern
-             (format nil "B~D" baudrate)
-             (find-package :sb-posix)))))
-      (sb-posix:cfsetispeed baudrate-bits attr)
-      (sb-posix:cfsetospeed baudrate-bits attr))
-    
-    (with-accessors ((cflag sb-posix:termios-cflag)
-                     (lflag sb-posix:termios-lflag)
-                     (iflag sb-posix:termios-iflag)
-                     (oflag sb-posix:termios-oflag)) attr
-      ;; Set frame size
-      (let ((size-bits
-             (eval
-              (intern
-               (format nil "CS~D" framesize)
-               (find-package :sb-posix)))))
-      (modify-bitfield cflag
-                       :disable (sb-posix:csize)
-                       :enable  (size-bits)))
-      
-      ;; Set parity...
-      (modify-bitfield cflag :disable (sb-posix:parenb sb-posix:parodd))
-      (when (char/= #\N parity)
-        (modify-bitfield cflag :enable (sb-posix:parenb))
-        (modify-bitfield iflag :enable (sb-posix:inpck sb-posix:istrip)))
-      (when (char= #\O parity)
-        (modify-bitfield cflag :enable (sb-posix:parodd 0)))
+(defparameter *framesizes*
+  `((5 . ,sb-posix:CS5)
+    (6 . ,sb-posix:CS6)
+    (7 . ,sb-posix:CS7)
+    (8 . ,sb-posix:CS8)))
 
-      ;; Set additional stop bit if needed
-      (modify-bitfield cflag :disable (sb-posix:cstopb))
-      (if (= stopbits 2) (modify-bitfield cflag :enable (sb-posix:cstopb)))
-
-      ;; Enable normal operation
-      (modify-bitfield cflag
-                       :enable (sb-posix:clocal sb-posix:cread))
-
-      ;; Set raw or canonical input and output
-      (let ((canon-bits (logior sb-posix:icanon
-                                sb-posix:echo
-                                sb-posix:echoe)))
-        (modify-bitfield lflag :disable (canon-bits))
-        (cond
-          (canon
-           (modify-bitfield lflag :disable (sb-posix:isig))
-           (modify-bitfield oflag :disable (sb-posix:opost)))
-          (t
-           (modify-bitfield lflag :enable (canon-bits))))))
-
-    ;; Set new attributes
-    (sb-posix:tcsetattr fd sb-posix:tcsanow attr))
-  t)
+;; Other useful constatns
+(defconstant csize sb-posix:csize)
+(defconstant parenb sb-posix:parenb)
+(defconstant parodd sb-posix:parodd)
+(defconstant inpck sb-posix:inpck)
+(defconstant istrip sb-posix:istrip)
+(defconstant cstopb sb-posix:cstopb)
+(defconstant clocal sb-posix:clocal)
+(defconstant cread sb-posix:cread)
+(defconstant icanon sb-posix:icanon)
+(defconstant echo sb-posix:echo)
+(defconstant echoe sb-posix:echoe)
+(defconstant isig sb-posix:isig)
+(defconstant opost sb-posix:opost)
