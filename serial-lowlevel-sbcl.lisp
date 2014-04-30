@@ -67,6 +67,15 @@
     (7 . ,sb-posix:CS7)
     (8 . ,sb-posix:CS8)))
 
+(macrolet ((def-assoc-getter (name list)
+              (let ((arg (gensym)))
+                `(defun ,name (,arg)
+                   (or (cdr (assoc ,arg ,list))
+                       (error 'serial-invalid-parameter
+                              :parameter ',name))))))
+  (def-assoc-getter get-baudrate *baudrates*)
+  (def-assoc-getter get-framesize *framesizes*))
+
 ;; Other useful constatns
 (defconstant csize sb-posix:csize)
 (defconstant parenb sb-posix:parenb)

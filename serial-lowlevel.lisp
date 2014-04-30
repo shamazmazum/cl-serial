@@ -5,8 +5,6 @@
      (setf ,field (logand ,field (lognot (logior ,@disable)))
            ,field (logior ,field ,@enable))))
 
-;; serial-error is platform specific
-
 (defun open-serial (devname &key input output)
   (let ((fd (open-serial% devname input output)))
     (values
@@ -17,19 +15,11 @@
   (close stream)) ; Just an alias
 
 (defun configure-serial (fd baudrate &key (canon t) (framesize 8) (stopbits 1) (parity #\N))
-  (declare (type (integer 5 8) framesize)
-           (type (integer 1 2) stopbits)
-           (type (member #\N #\O #\E) parity)
-           (type (member 50 75 110 134
-                         150 200 300 600
-                         1200 1800 2400 4800
-                         9600 19200 38400
-                         57600 115200 230400)
-                 baudrate)
+  (declare (type (integer 0) framesize stopbits baudrate)
            (type boolean canon))
   (let ((attr (tcgetattr fd)))
     ;; Set new baudrate
-    (let ((baudrate-bits (cdr (assoc baudrate *baudrates*))))
+    (let ((baudrate-bits (get-baudrate baudrate)))
       (cfsetispeed baudrate-bits attr)
       (cfsetospeed baudrate-bits attr))
     
@@ -38,23 +28,29 @@
                      (iflag termios-iflag)
                      (oflag termios-oflag)) attr
       ;; Set frame size
-      (let ((framesize (cdr (assoc framesize *framesizes*))))
+      (let ((framesize (get-framesize framesize)))
         (modify-bitfield cflag
                          :disable (csize)
                          :enable  (framesize)))
       
       ;; Set parity...
-      (modify-bitfield cflag :disable (parenb parodd))
-      (when (char/= #\N parity)
-        (modify-bitfield cflag :enable (parenb))
-        (modify-bitfield iflag :enable (inpck istrip)))
-      (when (char= #\O parity)
-        (modify-bitfield cflag :enable (parodd)))
+      (cond
+        ((char= #\N parity)
+         (modify-bitfield cflag :disable (parenb parodd)))
+        ((char= #\E parity)
+         (modify-bitfield cflag :enable (parenb) :disable (parodd)))
+        ((char= #\O parity)
+         (modify-bitfield cflag :enable (parenb parodd)))
+        (t (error 'serial-invalid-parameter :parameter 'parity)))
+      (if (char/= parity #\N) (modify-bitfield iflag :enable (inpck istrip)))
 
       ;; Set additional stop bit if needed
-      (if (= stopbits 2)
-          (modify-bitfield cflag :enable (cstopb))
-          (modify-bitfield cflag :disable (cstopb)))
+      (cond
+        ((= stopbits 1)
+         (modify-bitfield cflag :disable (cstopb)))
+        ((= stopbits 2)
+         (modify-bitfield cflag :enable (cstopb)))
+        (t (error 'serial-invalid-parameter :parameter 'stopbits)))
 
       ;; Enable normal operation
       (modify-bitfield cflag :enable (clocal cread))

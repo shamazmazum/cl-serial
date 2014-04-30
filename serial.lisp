@@ -55,7 +55,7 @@
           (serial-device-fd device) fd))
   (handler-bind
       (#+sbcl
-       ((or type-error sb-posix:syscall-error)
+       ((or serial-invalid-parameter sb-posix:syscall-error)
         #'(lambda (c)
             (declare (ignore c))
             (close device))))

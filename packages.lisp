@@ -6,7 +6,7 @@
   (:use #:cl)
   (:export #:open-serial
            #:configure-serial
-           #:serial-error))
+           #:serial-invalid-parameter))
 
 (defpackage serial
   (:use #:cl #:trivial-gray-streams #:serial-lowlevel)
@@ -20,3 +20,11 @@
            #:serial-device-canon-p
            #:with-serial-device
            #:reset-old-value))
+
+(in-package :serial-lowlevel)
+(define-condition serial-invalid-parameter ()
+  ((parameter :reader invalid-parameter
+              :initarg :parameter))
+  (:report (lambda (c s)
+             (format s "Invalid parameter was specified: ~A"
+                     (invalid-parameter c)))))
