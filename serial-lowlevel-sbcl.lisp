@@ -3,6 +3,10 @@
 (eval-when (:compile-toplevel :load-toplevel)
   (require 'sb-posix))
 
+#|(define-condition serial-error (type-error
+                                sb-posix:syscall-error)
+  ())|#
+
 (defun open-serial% (devname flags)
   (sb-posix:open devname
                  (modify-bitfield flags
@@ -26,9 +30,15 @@
   (close stream)) ; Just an alias
 
 (defun configure-serial (fd baudrate &key (canon t) (framesize 8) (stopbits 1) (parity #\N))
-  (declare (type (member 5 6 7 8) framesize)
-           (type (member 1 2) stopbits)
+  (declare (type (integer 5 8) framesize)
+           (type (integer 1 2) stopbits)
            (type (member #\N #\O #\E) parity)
+           (type (member 50 75 110 134
+                         150 200 300 600
+                         1200 1800 2400 4800
+                         9600 19200 38400
+                         57600 115200 230400)
+                 baudrate)
            (type boolean canon))
   (let ((attr (sb-posix:tcgetattr fd)))
     ;; Set new baudrate

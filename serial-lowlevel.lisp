@@ -5,10 +5,13 @@
 (defpackage serial-lowlevel
   (:use #:cl)
   (:export #:open-serial
-           #:configure-serial))
+           #:configure-serial
+           #:serial-error))
 (in-package :serial-lowlevel)
 
 (defmacro modify-bitfield (field &key disable enable)
   `(progn
      (setf ,field (logand ,field (lognot (logior ,@disable)))
            ,field (logior ,field ,@enable))))
+
+;; serial-error is platform specific

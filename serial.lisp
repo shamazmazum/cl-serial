@@ -65,7 +65,13 @@
                    :output (output-stream-p device))
     (setf (serial-device-stream device) stream
           (serial-device-fd device) fd))
-  (configure-serial-device device))
+  (handler-bind
+      (#+sbcl
+       ((or type-error sb-posix:syscall-error)
+        #'(lambda (c)
+            (declare (ignore c))
+            (close device))))
+    (configure-serial-device device)))
 
 (defmethod close ((device serial-device) &rest args)
   (declare (ignore args))
@@ -79,10 +85,10 @@
                  `(defmethod (setf ,name) :around (val (device serial-device))
                              (declare (ignore val))
                              (let ((oldval (,name device)))
+                               (call-next-method)
                                (restart-case
-                                   (progn
-                                     (call-next-method)
-                                     (configure-serial-device device))
+                                   (if (open-stream-p device)
+                                       (configure-serial-device device))
                                  (reset-old-value ()
                                    :report "Fall back to the old value"
                                    (setf (,name device) oldval)))))))))
