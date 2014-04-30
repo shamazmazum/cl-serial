@@ -5,11 +5,14 @@
      (setf ,field (logand ,field (lognot (logior ,@disable)))
            ,field (logior ,field ,@enable))))
 
-(defun open-serial (devname &key input output)
-  (let ((fd (open-serial% devname input output)))
-    (values
-     (make-stream-from-fd fd input output)
-     fd)))
+(macrolet ((def-assoc-getter (name list)
+              (let ((arg (gensym)))
+                `(defun ,name (,arg)
+                   (or (cdr (assoc ,arg ,list))
+                       (error 'serial-invalid-parameter
+                              :parameter ',name))))))
+  (def-assoc-getter get-baudrate *baudrates*)
+  (def-assoc-getter get-framesize *framesizes*))
 
 (defun close-serial (stream)
   (close stream)) ; Just an alias

@@ -1,4 +1,4 @@
-#-(or (and linux clisp) sbcl)
+#-(or clisp sbcl)
 (eval-when (:compile-toplevel :load-toplevel)
   (error "Only SBCL and clisp are supported"))
 

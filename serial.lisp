@@ -54,8 +54,9 @@
     (setf (serial-device-stream device) stream
           (serial-device-fd device) fd))
   (handler-bind
-      (#+sbcl
-       ((or serial-invalid-parameter sb-posix:syscall-error)
+      (((or serial-invalid-parameter
+            #+sbcl sb-posix:syscall-error
+            #+clisp termios-error)
         #'(lambda (c)
             (declare (ignore c))
             (close device))))
@@ -103,7 +104,6 @@
   ()
   (:documentation "Serial device open for output"))
 
-#-clisp
 (defclass serial-device-io (serial-device-output serial-device-input)
   ()
   (:documentation "Bidirectional serial device"))

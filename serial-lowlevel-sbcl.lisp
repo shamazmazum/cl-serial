@@ -18,6 +18,12 @@
                          :output output
                          :element-type '(unsigned-byte 8)))
 
+(defun open-serial (devname &key input output)
+  (let ((fd (open-serial% devname input output)))
+    (values
+     (make-stream-from-fd fd input output)
+     fd)))
+
 (defun tcgetattr (fd)
   (sb-posix:tcgetattr fd))
 (defun tcsetattr (fd attr)
@@ -66,15 +72,6 @@
     (6 . ,sb-posix:CS6)
     (7 . ,sb-posix:CS7)
     (8 . ,sb-posix:CS8)))
-
-(macrolet ((def-assoc-getter (name list)
-              (let ((arg (gensym)))
-                `(defun ,name (,arg)
-                   (or (cdr (assoc ,arg ,list))
-                       (error 'serial-invalid-parameter
-                              :parameter ',name))))))
-  (def-assoc-getter get-baudrate *baudrates*)
-  (def-assoc-getter get-framesize *framesizes*))
 
 ;; Other useful constatns
 (defconstant csize sb-posix:csize)

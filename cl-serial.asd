@@ -4,7 +4,7 @@
   :author "Vasily Postnicov <shamaz.mazum at gmail dot com>"
   :components ((:file "packages")
                #+sbcl (:file "serial-lowlevel-sbcl")
-               #+(and linux clisp) (:file "serial-lowlevel-clisp")
+               #+clisp (:file "serial-lowlevel-clisp")
                (:file "serial-lowlevel")
                (:file "serial"))
   :depends-on (:trivial-gray-streams))
