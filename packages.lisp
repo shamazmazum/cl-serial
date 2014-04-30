@@ -6,7 +6,7 @@
   (:use #:cl)
   (:export #:open-serial
            #:configure-serial
-           #:serial-invalid-parameter))
+           #:serial-error))
 
 (defpackage serial
   (:use #:cl #:trivial-gray-streams #:serial-lowlevel)
@@ -22,7 +22,10 @@
            #:reset-old-value))
 
 (in-package :serial-lowlevel)
-(define-condition serial-invalid-parameter ()
+(define-condition serial-error () ()
+  (:documentation "Parent of all conditions associated with serial streams"))
+
+(define-condition serial-invalid-parameter (serial-error)
   ((parameter :reader invalid-parameter
               :initarg :parameter))
   (:report (lambda (c s)

@@ -54,9 +54,8 @@
     (setf (serial-device-stream device) stream
           (serial-device-fd device) fd))
   (handler-bind
-      (((or serial-invalid-parameter
-            #+sbcl sb-posix:syscall-error
-            #+clisp termios-error)
+      (((or serial-error
+            #+sbcl sb-posix:syscall-error)
         #'(lambda (c)
             (declare (ignore c))
             (close device))))

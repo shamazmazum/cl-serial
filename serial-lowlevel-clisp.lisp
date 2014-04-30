@@ -3,7 +3,7 @@
 (eval-when (:compile-toplevel :load-toplevel)
   (require "linux"))
 
-(define-condition termios-error (error)
+(define-condition termios-error (serial-error)
   ()
   (:report (lambda (c s)
              ;; We cannot get errno in clisp
