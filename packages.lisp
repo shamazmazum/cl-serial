@@ -19,6 +19,7 @@
            #:serial-device-parity
            #:serial-device-canon-p
            #:with-serial-device
+           #:serial-error
            #:reset-old-value))
 
 (in-package :serial-lowlevel)

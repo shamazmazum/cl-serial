@@ -2,6 +2,18 @@
 (eval-when (:compile-toplevel :load-toplevel)
   (require 'sb-posix))
 
+(define-condition termios-error (serial-error)
+  ((errno :reader  termios-errno
+          :initarg :errno)
+   (name  :reader  termios-name
+          :initarg :name))
+  (:report (lambda (c s)
+             (let ((errno (termios-errno c))
+                   (name  (termios-name c)))
+               (format s "Termios error in ~S: ~A(~A)"
+                       (if name name "syscall")
+                       (sb-int:strerror errno) errno)))))
+
 (defun open-serial% (devname input output)
   (sb-posix:open devname
                  (logior sb-posix:o-ndelay
@@ -25,9 +37,20 @@
      fd)))
 
 (defun tcgetattr (fd)
-  (sb-posix:tcgetattr fd))
+  (handler-case
+      (sb-posix:tcgetattr fd)
+    (sb-posix:syscall-error (c)
+      ;; Signal a portable condition
+      (error 'termios-error
+             :name  (sb-posix:syscall-name c)
+             :errno (sb-posix:syscall-errno c)))))
 (defun tcsetattr (fd attr)
-  (sb-posix:tcsetattr fd sb-posix:tcsanow attr))
+  (handler-case
+      (sb-posix:tcsetattr fd sb-posix:tcsanow attr)
+    (sb-posix:syscall-error (c)
+      (error 'termios-error
+             :name  (sb-posix:syscall-name c)
+             :errno (sb-posix:syscall-errno c)))))
 (defun cfsetispeed (speed attr)
   (sb-posix:cfsetispeed speed attr))
 (defun cfsetospeed (speed attr)

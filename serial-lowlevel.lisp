@@ -18,8 +18,6 @@
   (close stream)) ; Just an alias
 
 (defun configure-serial (fd baudrate &key (canon t) (framesize 8) (stopbits 1) (parity #\N))
-  (declare (type (integer 0) framesize stopbits baudrate)
-           (type boolean canon))
   (let ((attr (tcgetattr fd)))
     ;; Set new baudrate
     (let ((baudrate-bits (get-baudrate baudrate)))
