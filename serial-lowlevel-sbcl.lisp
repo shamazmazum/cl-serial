@@ -29,7 +29,7 @@
                          :input input
                          :output output
                          :element-type '(unsigned-byte 8)
-			 :buffering :none))
+                         :buffering :none))
 
 (defun open-serial (devname &key input output)
   (let ((fd (open-serial% devname input output)))
